@@ -354,6 +354,7 @@ def select_monitor():
             metric_iterator = cloudwatch.metrics.filter(Namespace='AWS/EC2',
                                                         MetricName='CPUUtilization',
                                                         Dimensions=[{'Name':'InstanceId', 'Value': selectedinstance.id}])
+            print(metric_iterator)
             metric = list(metric_iterator)[0]    # extract first (only) element
             response = metric.get_statistics(StartTime = datetime.utcnow() - timedelta(minutes=5),   # 5 minutes ago
                                              EndTime=datetime.utcnow(),                              # now
@@ -362,12 +363,19 @@ def select_monitor():
             print ("Average CPU utilisation:", response['Datapoints'][0]['Average'], response['Datapoints'][0]['Unit'])
             # print (response)
             input("\nPress Enter to continue...")
-            monitor_menu()
-        except:   
+            if choice == "R" or choice == "r":
+                select_monitor()
+            else:
+               monitor_menu()
+        except Exception as e:
+            print(e)
             logging.warning("Issue with choice entry to terminate an instance")
             print("Incorrect choice, please try again")
-            input("\nPress Enter to continue...")
-            monitor_menu()
+            choice = input("\nPress Enter to continue...or R to repeat")
+            if choice == "R" or choice == "r":
+                select_monitor()
+            else:
+               monitor_menu()
 
 def cloudwatch_alarm():
     instance_list = []
@@ -418,6 +426,7 @@ def cloudwatch_alarm():
             )
             print(response2)
             logging.info(response2)
+            input("\nPress Enter to continue...")
             monitor_menu()
         except Exception as e:
             print(e)
