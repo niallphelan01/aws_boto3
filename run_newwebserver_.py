@@ -22,7 +22,7 @@ logging.basicConfig(
     datefmt='%d/%m/%Y %I:%M:%S %p'
 )
 
-def main():
+def main():    #Main function to call the main menu
     logging.info('Program started')
     menu()
 
@@ -451,7 +451,7 @@ def cpu_utilisation(usage):
             monitor_menu()
 def open_logfile():
     try:
-        subprocess.call(filename, shell=True)
+        subprocess.call('nano log/aws_assignment.log', shell=True)
         input("\nPress Enter to continue...")
         main()
 
