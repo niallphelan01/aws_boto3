@@ -25,8 +25,6 @@ logging.basicConfig(
 def main():    #Main function to call the main menu
     logging.info('Program started')
     menu()
-
-
 def menu():
     logging.info('Main menu selected')
     print("\n\n\n              ************MAIN MENU**************")
@@ -55,8 +53,6 @@ def menu():
         print("You must only select either A,B,C, or D.")
         print("Please try again")
         menu()
-
-
 def instance_menu():
     logging.info('Instance Menu Selected')
     print("\n\n\n              ************INSTANCE MENU**************")
@@ -89,19 +85,17 @@ def instance_menu():
         print("You must only select either A,B,C, or D.")
         print("Please try again")
         instance_menu()
-
 def monitor_menu():
     print("\n\n\n              ************MONITORING MENU**************")
     time.sleep(0.02)
     print()
 
     choice = input("""
-                      A: Select the running instance to be monitored
-                      B: Set Alarm on instance
+                      A: Monitor the CPU utilisation on an instance
+                      B: Set Alarm on instance (note less than 20%)
                       ------------------------
-                      C: Increase CPU usage on an instance TBC
-                      D: Decrease CPU usage on an instance  TBC
-                      E: 
+                      C: Set custom monitoring on EC2 instance to cloudwatch
+                      ------------------------ 
                       Q: Back to Main Menu
 
                       Please enter your choice: """)
@@ -111,18 +105,13 @@ def monitor_menu():
     elif choice == "B" or choice == "b":
         cloudwatch_alarm()
     elif choice == "C" or choice == "c":
-        print("Choice C")
-        monitor_menu()
-    elif choice == "D" or choice == "d":
-        print("Choice C")
+        pushmonitoring()
     elif choice == "Q" or choice == "q":
         menu()
     else:
         print("You must only select either A,B,C, or D.")
         print("Please try again")
         monitor_menu()
-
-
 def createNewInstance():
     ec2 = boto3.resource('ec2')
     print("\nStarting instance creation process, please be patient")
@@ -185,8 +174,6 @@ def createNewInstance():
         print("No instance running")
     input("\nPress Enter to continue...")
     instance_menu()
-
-
 def list_all_instance():  # Listing of all instances in all statuses
     ec2 = boto3.resource('ec2')
     print("\nAttempting to list instances, please be patient")
@@ -201,8 +188,6 @@ def list_all_instance():  # Listing of all instances in all statuses
         print("Error handling instances more than likely due to connection")
     input("\nPress Enter to continue...")
     instance_menu()
-
-
 def connectToInstance():
     instance_list = []
     try:
@@ -225,9 +210,9 @@ def connectToInstance():
                 int(choice)]  # convert string input to int and select the value in the array
             print(selected_instance)
             subprocess.run(
-                ssh_text + selected_instance.public_ip_address + " \ 'sudo yum -y install httpd; sudo systemctl enable httpd; sudo service httpd start'",
+                ssh_text + selected_instance.public_ip_address + " \ 'sudo yum -y install httpd; sudo systemctl enable httpd; sudo service httpd start;'",
                 shell=True)
-            # subprocess.run("ssh -o StrictHostkeyChecking=no -i kp2020.pem ec2-user@" + selectedInstance.public_ip_address +" \ 'sudo systemctl enable httpd'", shell=True)
+            # subprocess.run("ssh -o StrictHostkeyChecking=no -i kp2020.pem ec2-user@" + selectedInstance.public_ip_address +" \ 'sudo systemctl enable hqttpd'", shell=True)
             # subprocess.run("ssh -o StrictHostkeyChecking=no -i kp2020.pem ec2-user@" + selectedInstance.public_ip_address +" \ 'sudo service httpd start'", shell=True)
             s3_check_create.check_bucket("witdemo-23-01-2020")  # check to see if the required s3 bucket is created
             subprocess.call('curl "http://devops.witdemo.net/image.jpg" -o "image.jpg"', shell=True)
@@ -245,7 +230,7 @@ def connectToInstance():
             except Exception as error:
                 print(error)
                 try:  # if the aws upload doesnt work then I am going to send a local copy to the webserver via scp
-                    subprocess.run('scp -i kp2020.pem image.jpg ec2-user@52.48.204.210:',
+                    subprocess.run("'scp -i kp2020.pem image.jpg ec2-user@" + selected_instance.public_ip_address + ":'",
                                    shell=True)  # scp to copy the image file to the webserver
                     copy_text = " \ 'sudo cp index.html image.jpg /var/www/html/'"  # copy both the index.html and the image.jpg as the upload/download from s3 bucket with fail
                     html10 = "echo \<img src=/image.jpg\> >> index.html'"  # copy the image from the local source on the webserver sent over by scp
@@ -274,8 +259,6 @@ def connectToInstance():
             print("Incorrect choice, as server may not be fully loaded,  please try again")
             input("\nPress Enter to continue...")
             instance_menu()
-
-
 def instance_listing(status):
     i = 0
     instance_list = []
@@ -302,8 +285,6 @@ def instance_listing(status):
         logging.warning("Couldn't create a list of instances")
         print("Error searching for instances:")
     return instance_list
-
-
 def quitInstance():
     instance_list = []
     try:
@@ -354,7 +335,6 @@ def select_monitor():
             metric_iterator = cloudwatch.metrics.filter(Namespace='AWS/EC2',
                                                         MetricName='CPUUtilization',
                                                         Dimensions=[{'Name':'InstanceId', 'Value': selectedinstance.id}])
-            print(metric_iterator)
             metric = list(metric_iterator)[0]    # extract first (only) element
             response = metric.get_statistics(StartTime = datetime.utcnow() - timedelta(minutes=5),   # 5 minutes ago
                                              EndTime=datetime.utcnow(),                              # now
@@ -369,14 +349,13 @@ def select_monitor():
                monitor_menu()
         except Exception as e:
             print(e)
-            logging.warning("Issue with choice entry to terminate an instance")
-            print("Incorrect choice, please try again")
+            logging.warning("Issue with choice entry as no data yet for the instance")
+            print("Issue with choice entry as no data yet for the instance")
             choice = input("\nPress Enter to continue...or R to repeat")
             if choice == "R" or choice == "r":
                 select_monitor()
             else:
                monitor_menu()
-
 def cloudwatch_alarm():
     instance_list = []
     try:
@@ -399,7 +378,7 @@ def cloudwatch_alarm():
             response = cloudwatch_client.put_metric_alarm(
                  AlarmName='Web_Server_CPU_Utilization',
                  AlarmActions=['arn:aws:sns:eu-west-1:013355473762:test',],   #this arn will send an email to my email account
-                 ComparisonOperator='GreaterThanThreshold',
+                 ComparisonOperator='LessThanThreshold',
                  EvaluationPeriods=1,
                  MetricName='CPUUtilization',
                  Namespace='AWS/EC2',
@@ -407,7 +386,7 @@ def cloudwatch_alarm():
                  Statistic='Average',
                  Threshold=20.0,
                  ActionsEnabled=False,
-                 AlarmDescription='Alarm when server CPU exceeds 20%',   #very low for example for assignment
+                 AlarmDescription='Alarm when server CPU lower than 20%',   #very low for example for assignment
                  Dimensions=[
                      {
                      'Name': 'InstanceId',
@@ -468,4 +447,62 @@ def open_logfile():
         print(e)
         input("\nPress Enter to continue...")
         main()
+def pushmonitoring():
+    instance_list = []
+    try:
+        instance_list = instance_listing(['running'])
+    except:
+        logging.warning("Couldn't create a list of instances")
+        print("Error searching for instances:")
+
+    if not instance_list:
+        logging.warning("No running instances")
+        print("No running instances")
+        input("\nPress Enter to continue...")
+        monitor_menu()
+    else:
+        choice = input("""Which instance would you like to setup a server on?""")
+        print(choice)
+        try:
+            selected_instance = instance_list[int(choice)]
+            ssh_text = "ssh -o StrictHostkeyChecking=no -i kp2020.pem ec2-user@"
+            selected_instance.monitor() #enabled detailed monitoring
+            subprocess.run("scp -i kp2020.pem credentials ec2-user@" + selected_instance.public_ip_address + ":.",
+                                   shell=True)  # scp to copy the monitoring file to the webserver
+            subprocess.run("scp -i kp2020.pem config ec2-user@" + selected_instance.public_ip_address + ":.",
+                                   shell=True)  # scp to copy the monitoring file to the webserver
+            subprocess.run(
+                ssh_text + selected_instance.public_ip_address + " \ 'mkdir ~/.aws; mv credentials ~/.aws/credentials; mv config ~/.aws/config'",
+                shell=True) #move the credentials and aws config files to the required folders
+            #create a file call mem.sh
+            f = open("mem.sh", "w+")
+            f.write("#!/bin/bash\n")
+            f.write("USEDMEMORY=$(free -m | awk 'NR==2{printf \"%.2f\t\", $3*100/$2 }')\n")
+            f.write("TCP_CONN=$(netstat -an | wc -l)\n")
+            f.write("TCP_CONN_PORT_80=$(netstat -an | grep 80 | wc -l)\n")
+            f.write("USERS=$(uptime |awk '{ print $6 }')\n")
+            f.write("IO_WAIT=$(iostat | awk 'NR==4 {print $5}')\n")
+            f.write("instance_id=" + selected_instance.id+"\n")
+            f.write("aws cloudwatch put-metric-data --metric-name memory-usage --dimensions Instance=$instance_id  --namespace \"Custom\" --value $USEDMEMORY\n")
+            f.write("aws cloudwatch put-metric-data --metric-name Tcp_connections --dimensions Instance=$instance_id  --namespace \"Custom\" --value $TCP_CONN\n")
+            f.write("aws cloudwatch put-metric-data --metric-name TCP_connection_on_port_80 --dimensions Instance=$instance_id  --namespace \"Custom\" --value $TCP_CONN_PORT_80\n")
+            f.write("aws cloudwatch put-metric-data --metric-name IO_WAIT --dimensions Instance=$instance_id --namespace \"Custom\" --value $IO_WAIT\n")
+            f.close()
+            subprocess.run("scp -i kp2020.pem mem.sh ec2-user@" + selected_instance.public_ip_address + ":.",
+                                   shell=True)  # scp to copy the monitoring file to the webserver
+            subprocess.run("scp -i kp2020.pem cron.sh ec2-user@" + selected_instance.public_ip_address + ":.",
+                                   shell=True)  # scp to copy the cronjob file to the webserver
+            subprocess.run(
+                ssh_text + selected_instance.public_ip_address + " \ 'chmod +x mem.sh; chmod +x cron.sh; ./mem.sh;sudo ./cron.sh'",
+                shell=True) #change the permissions on the mem.sh and cron files and run both
+
+
+            input("\nPress Enter to continue...")
+            monitor_menu()
+        except:
+            logging.warning("Issue with choice entry to select an instance")
+            print("Incorrect choice, as server may not be fully loaded,  please try again thanks")
+            input("\nPress Enter to continue...")
+            monitor_menu()
+
 main()
