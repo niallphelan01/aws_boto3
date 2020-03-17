@@ -1,7 +1,5 @@
 #!/usr/bin/env python3
 import logging  # Logging functionality
-import os
-
 import boto3  # import the boto api
 import subprocess
 import time  # pausing the interface
@@ -419,30 +417,6 @@ def cloudwatch_alarm():
             logging.info(response2)
             input("\nPress Enter to continue...")
             monitor_menu()
-        except Exception as e:
-            print(e)
-            logging.warning(e)
-            print("Incorrect choice, please try again")
-            input("\nPress Enter to continue...")
-            monitor_menu()
-def cpu_utilisation(usage):
-    instance_list = []
-    try:
-        instance_list = instance_listing(['running'])   #function that takes in the instance status and returns an arrany of instance id's
-    except:
-        logging.warning("Couldn't create a list of instances")
-        print("Error searching for instances:")
-    if not instance_list:  # check for an empty array i.e. no running instances
-        print("No running instances")
-        logging.info("No running instances")
-        monitor_menu()
-    else:
-        choice = input("""Please select the instance number to monitor:""")
-        print(choice)
-        try:
-             selectedinstance = instance_list[int(choice)]
-             ssh_text = "ssh -o StrictHostkeyChecking=no -i kp2020.pem ec2-user@"
-
         except Exception as e:
             print(e)
             logging.warning(e)
