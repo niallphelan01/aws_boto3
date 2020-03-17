@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 import logging  # Logging functionality
+import os
+
 import boto3  # import the boto api
 import subprocess
 import time  # pausing the interface
@@ -34,7 +36,7 @@ def menu():
     choice = input("""
                       A: Instance Menu
                       B: Monitoring menu
-                      C: Open Logfile (to be completed)
+                      C: Open Logfile for information
                       -------------------
                       Q: Quit/Log Out
 
@@ -66,6 +68,8 @@ def instance_menu():
                     -----------------------------------------------
                       D: Terminate instance
                     -----------------------------------------------
+                      E: open terminal to instance
+                    -----------------------------------------------
                       Q: Back to Main Menu
 
                       Please enter your choice: """)
@@ -79,6 +83,8 @@ def instance_menu():
         connectToInstance()   #list all running instances and then select one to excute further scripts on
     elif choice == "D" or choice == "d":
         quitInstance()
+    elif choice == "E" or choice == "e":
+        openterminal_instance()
     elif choice == "Q" or choice == "q":
         menu()
     else:
@@ -92,9 +98,10 @@ def monitor_menu():
 
     choice = input("""
                       A: Monitor the CPU utilisation on an instance
-                      B: Set Alarm on instance (note less than 20%)
+                      B: Set Alarm on instance (note NetworkIn less than 30k)
                       ------------------------
                       C: Set custom monitoring on EC2 instance to cloudwatch
+                      D: Get custom data back from EC2 instance 
                       ------------------------ 
                       Q: Back to Main Menu
 
@@ -106,6 +113,8 @@ def monitor_menu():
         cloudwatch_alarm()
     elif choice == "C" or choice == "c":
         pushmonitoring()
+    elif choice == "D" or choice == "d":
+        custom_monitoring()
     elif choice == "Q" or choice == "q":
         menu()
     else:
@@ -332,10 +341,12 @@ def select_monitor():
         try:
             selectedinstance = instance_list[int(choice)]
             selectedinstance.monitor()
+
             metric_iterator = cloudwatch.metrics.filter(Namespace='AWS/EC2',
                                                         MetricName='CPUUtilization',
                                                         Dimensions=[{'Name':'InstanceId', 'Value': selectedinstance.id}])
             metric = list(metric_iterator)[0]    # extract first (only) element
+            print(metric_iterator)
             response = metric.get_statistics(StartTime = datetime.utcnow() - timedelta(minutes=5),   # 5 minutes ago
                                              EndTime=datetime.utcnow(),                              # now
                                              Period=300,                                             # 5 min intervals
@@ -373,31 +384,32 @@ def cloudwatch_alarm():
         try:
             selectedinstance = instance_list[int(choice)]
             selectedinstance.monitor()
+            alarm_name = "Webserver_NetworkIn_instance_" + selectedinstance.id
             cloudwatch_client = boto3.client('cloudwatch')
             #https://boto3.amazonaws.com/v1/documentation/api/latest/guide/cw-example-creating-alarms.html
             response = cloudwatch_client.put_metric_alarm(
-                 AlarmName='Web_Server_CPU_Utilization',
-                 AlarmActions=['arn:aws:sns:eu-west-1:013355473762:test',],   #this arn will send an email to my email account
+                 AlarmName= alarm_name,
+                 AlarmActions=['arn:aws:sns:eu-west-1:013355473762:test'],   #this arn will send an email to my email account
                  ComparisonOperator='LessThanThreshold',
                  EvaluationPeriods=1,
-                 MetricName='CPUUtilization',
+                 MetricName='NetworkIn',
                  Namespace='AWS/EC2',
                  Period=60,
                  Statistic='Average',
-                 Threshold=20.0,
-                 ActionsEnabled=False,
-                 AlarmDescription='Alarm when server CPU lower than 20%',   #very low for example for assignment
+                 Threshold=30000,
+                 ActionsEnabled=True,
+                 AlarmDescription='Alarm when Network In < 30k',   #very low for example for assignment
                  Dimensions=[
                      {
                      'Name': 'InstanceId',
                      'Value': selectedinstance.id
                      },
                  ],
-                 Unit='Seconds'
+                 Unit=''  #important to set this correctly as leaving it to the incorrect value will cause errors displaying in cloudwatch alarms page
             )
             print(response)
             response2 = cloudwatch_client.describe_alarm_history(
-                 AlarmName='Web_Server_CPU_Utilization',
+                 AlarmName=alarm_name,
                  HistoryItemType='Action',
                  StartDate=datetime(2015, 1, 1),
                  EndDate=datetime(2022, 1, 1),
@@ -483,8 +495,8 @@ def pushmonitoring():
             f.write("USERS=$(uptime |awk '{ print $6 }')\n")
             f.write("IO_WAIT=$(iostat | awk 'NR==4 {print $5}')\n")
             f.write("instance_id=" + selected_instance.id+"\n")
-            f.write("aws cloudwatch put-metric-data --metric-name memory-usage --dimensions Instance=$instance_id  --namespace \"Custom\" --value $USEDMEMORY\n")
-            f.write("aws cloudwatch put-metric-data --metric-name Tcp_connections --dimensions Instance=$instance_id  --namespace \"Custom\" --value $TCP_CONN\n")
+            f.write("aws cloudwatch put-metric-data --metric-name memory-usage --dimensions Instance=$instance_id  --namespace \"Custom\" --value $USEDMEMORY \n")
+            f.write("aws cloudwatch put-metric-data --metric-name Tcp_connections --dimensions Instance=$instance_id  --namespace \"Custom\" --value $TCP_CONN s\n")
             f.write("aws cloudwatch put-metric-data --metric-name TCP_connection_on_port_80 --dimensions Instance=$instance_id  --namespace \"Custom\" --value $TCP_CONN_PORT_80\n")
             f.write("aws cloudwatch put-metric-data --metric-name IO_WAIT --dimensions Instance=$instance_id --namespace \"Custom\" --value $IO_WAIT\n")
             f.close()
@@ -504,5 +516,67 @@ def pushmonitoring():
             print("Incorrect choice, as server may not be fully loaded,  please try again thanks")
             input("\nPress Enter to continue...")
             monitor_menu()
+def custom_monitoring():
+    instance_list = []
+    try:
+        instance_list = instance_listing(['running'])   #function that takes in the instance status and returns an arrany of instance id's
+    except:
+        logging.warning("Couldn't create a list of instances")
+        print("Error searching for instances:")
+    if not instance_list:  # check for an empty array i.e. no running instances
+        print("No running instances")
+        logging.info("No running instances")
+        monitor_menu()
+    else:
+        choice = input("""Please select the instance number to monitor:""")
+
+        try:
+            selectedinstance = instance_list[int(choice)]
+            selectedinstance.monitor()
+            print(selectedinstance.id)
+            cloudwatch_client = boto3.client('cloudwatch')
+            response = cloudwatch_client.get_metric_statistics(Namespace='Custom',
+                                                        MetricName='IO_WAIT',Dimensions=[{'Value': selectedinstance.id, 'Name':'Instance'}], StartTime = datetime.utcnow() - timedelta(minutes=5),   # 5 minutes ago
+                                             EndTime=datetime.utcnow(),                              # now
+                                             Period=300,                                             # 5 min intervals
+                                             Statistics=['Average'])
+            print ("Average IO wait time:", response['Datapoints'][0]['Average'], "seconds")
+        except Exception as e:
+            print(e)
+            logging.warning("Issue with choice entry as incorrect setup for custom data")
+            print("Issue with choice entry as incorrect setup for custom data")
+            choice = input("\nPress Enter to continue...or R to repeat")
+            if choice == "R" or choice == "r":
+                custom_monitoring()
+            else:
+               monitor_menu()
+def openterminal_instance():
+    instance_list = []
+    try:
+        instance_list = instance_listing(['running'])   #function that takes in the instance status and returns an arrany of instance id's
+    except:
+        logging.warning("Couldn't create a list of instances")
+        print("Error searching for instances:")
+    if not instance_list:  # check for an empty array i.e. no running instances
+        print("No running instances")
+        logging.info("No running instances")
+        monitor_menu()
+    else:
+        choice = input("""Please select the instance number to monitor:""")
+
+        try:
+            selected_instance = instance_list[int(choice)]
+            ip_with_dash = selected_instance.public_ip_address.replace('.','-')   # replace the dots with dashes for to be able to gain acess to the ec2 instance
+            #reference https://docs.python.org/2/library/string.html
+            command = "gnome-terminal --command 'ssh -i kp2020.pem ec2-user@ec2-" + ip_with_dash   +".eu-west-1.compute.amazonaws.com'"  #using gnome terminal (this will be a limitation at the minute)
+            subprocess.Popen(command, shell=True)
+            instance_menu()
+        except Exception as e:
+            print(e)
+            logging.warning("Issue opening the terminal")
+            print("Issue opening terminal")
+            choice = input("\nPress Enter to continue...")
+            instance_menu()
+
 
 main()
