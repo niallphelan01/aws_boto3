@@ -137,7 +137,7 @@ def createNewInstance():
             MinCount=1,
             MaxCount=1,
             InstanceType=choosenInstanceType,  # t2 nano default or micro depending upon selection
-            KeyName='kp 2020',
+            KeyName='kp2020',
             SecurityGroupIds=['sg-0e17eda475266e679'],  # one of my security groups that has http and ssh
         )
         print("Instance ID:" + instance[0].id + " being created. Please be patient!")
